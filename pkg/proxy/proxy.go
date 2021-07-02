@@ -50,6 +50,7 @@ type Config struct {
 
 	ExtraUserHeaders                map[string][]string
 	ExtraUserHeadersClientIPEnabled bool
+	AuthorizerAddress               string
 }
 
 type errorHandlerFn func(http.ResponseWriter, *http.Request, error)
