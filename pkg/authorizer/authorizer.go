@@ -8,10 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"time"
 
+	"github.com/cenkalti/backoff"
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
+	"github.com/taskcluster/httpbackoff"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sJson "k8s.io/apimachinery/pkg/runtime/serializer/json"
 
@@ -56,15 +57,15 @@ func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attribut
 			// Extra:  attrs.GetUser().GetExtra(),
 		},
 	}
-	opaClient := http.Client{
-		Timeout: 5 * time.Second,
-	}
 	jsonPayload := createOpaRequestPayload(&sar)
 	// request authorizer
 	// whauthz := webhook.WebhookAuthorizer{}
-	authzResponse, err := opaClient.Post(a.opaURI, "application/json", bytes.NewReader([]byte(jsonPayload)))
+	backoffClient := httpbackoff.Client{BackOffSettings: backoff.NewExponentialBackOff()}
+	backoffClient.BackOffSettings.MaxElapsedTime = time.Second * 5
+	authzResponse, _, err := backoffClient.Post(a.opaURI, "application/json", jsonPayload)
 	if err != nil {
 		klog.Errorf("Authorization server is not responding: %s", err.Error())
+		return authorizer.DecisionNoOpinion, "Authorizer not responding", err
 	}
 	defer authzResponse.Body.Close()
 	if authzResponse.StatusCode == 200 {
