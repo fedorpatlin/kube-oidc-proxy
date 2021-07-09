@@ -4,24 +4,32 @@ package audit
 import (
 	"fmt"
 	"net/http"
+	"os"
 
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/sets"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
+	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
+	"k8s.io/klog"
 
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer"
+	"github.com/jetstack/kube-oidc-proxy/pkg/noimpersonatedrequest"
 )
 
 type Audit struct {
 	opts         *options.AuditOptions
 	serverConfig *server.CompletedConfig
+	authzOpts    *options.AuthorizerOptions
 }
 
 // New creates a new Audit struct to handle auditing for proxy requests. This
 // is mostly a wrapper for the apiserver auditing handlers to combine them with
 // the proxy.
-func New(opts *options.AuditOptions, externalAddress string, secureServingInfo *server.SecureServingInfo) (*Audit, error) {
+func New(opts *options.AuditOptions, authzOpts *options.AuthorizerOptions, externalAddress string, secureServingInfo *server.SecureServingInfo) (*Audit, error) {
 	serverConfig := &server.Config{
 		ExternalAddress: externalAddress,
 		SecureServing:   secureServingInfo,
@@ -42,6 +50,7 @@ func New(opts *options.AuditOptions, externalAddress string, secureServingInfo *
 
 	return &Audit{
 		opts:         opts,
+		authzOpts:    authzOpts,
 		serverConfig: &completed,
 	}, nil
 }
@@ -69,8 +78,24 @@ func (a *Audit) Shutdown() error {
 // WithRequest will wrap the given handler to inject the request information
 // into the context which is then used by the wrapped audit handler.
 func (a *Audit) WithRequest(handler http.Handler) http.Handler {
+	scheme := runtime.NewScheme()
 	handler = genericapifilters.WithAudit(handler, a.serverConfig.AuditBackend, a.serverConfig.AuditPolicyChecker, a.serverConfig.LongRunningFunc)
-	return genericapifilters.WithRequestInfo(handler, a.serverConfig.RequestInfoResolver)
+	if len(a.authzOpts.AuthorizerUri) > 0 {
+		handler = noimpersonatedrequest.WithPodSA(handler, func() []byte {
+			saToken, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+			if err != nil {
+				klog.Errorf("error reading serviceaccount token %s", err.Error())
+				return []byte("")
+			}
+			return saToken
+		})
+		handler = genericapifilters.WithAuthorization(handler, authorizer.NewOPAAuthorizer(a.authzOpts), serializer.NewCodecFactory(scheme).WithoutConversion())
+	}
+	rif := request.RequestInfoFactory{
+		APIPrefixes:          sets.NewString("api", "apis"),
+		GrouplessAPIPrefixes: sets.NewString("api"),
+	}
+	return genericapifilters.WithRequestInfo(handler, &rif)
 }
 
 // WithUnauthorized will wrap the given handler to inject the request

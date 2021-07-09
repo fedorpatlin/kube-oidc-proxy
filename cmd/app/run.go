@@ -81,11 +81,10 @@ func buildRunCommand(stopCh <-chan struct{}, opts *options.Options) *cobra.Comma
 
 				ExtraUserHeaders:                opts.App.ExtraHeaderOptions.ExtraUserHeaders,
 				ExtraUserHeadersClientIPEnabled: opts.App.ExtraHeaderOptions.EnableClientIPExtraUserHeader,
-				AuthorizerAddress:               opts.Authorizer.AuthorizerUri,
 			}
 
 			// Initialise proxy with OIDC token authenticator
-			p, err := proxy.New(restConfig, opts.OIDCAuthentication, opts.Audit,
+			p, err := proxy.New(restConfig, opts.OIDCAuthentication, opts.Audit, opts.Authorizer,
 				tokenReviewer, secureServingInfo, proxyConfig)
 			if err != nil {
 				return err

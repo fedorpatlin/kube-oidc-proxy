@@ -50,7 +50,6 @@ type Config struct {
 
 	ExtraUserHeaders                map[string][]string
 	ExtraUserHeadersClientIPEnabled bool
-	AuthorizerAddress               string
 }
 
 type errorHandlerFn func(http.ResponseWriter, *http.Request, error)
@@ -75,6 +74,7 @@ type Proxy struct {
 func New(restConfig *rest.Config,
 	oidcOptions *options.OIDCAuthenticationOptions,
 	auditOptions *options.AuditOptions,
+	authzOptions *options.AuthorizerOptions,
 	tokenReviewer *tokenreview.TokenReview,
 	ssinfo *server.SecureServingInfo,
 	config *Config) (*Proxy, error) {
@@ -95,7 +95,7 @@ func New(restConfig *rest.Config,
 		return nil, err
 	}
 
-	auditor, err := audit.New(auditOptions, config.ExternalAddress, ssinfo)
+	auditor, err := audit.New(auditOptions, authzOptions, config.ExternalAddress, ssinfo)
 	if err != nil {
 		return nil, err
 	}
