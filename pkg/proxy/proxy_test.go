@@ -273,7 +273,7 @@ func newTestProxy(t *testing.T) *fakeProxy {
 	}
 	passAuthzOptions := new(options.AuthorizerOptions)
 	passAuthzOptions.AuthorizerUri = ""
-	auditor, err := audit.New(new(options.AuditOptions), passAuthzOptions, "0.0.0.0:1234", new(server.SecureServingInfo))
+	auditor, err := audit.New(new(options.AuditOptions), "0.0.0.0:1234", new(server.SecureServingInfo))
 	if err != nil {
 		t.Fatalf("failed to create auditor: %s", err)
 	}

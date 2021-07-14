@@ -31,7 +31,7 @@ type opaResponse struct {
 }
 
 func NewOPAAuthorizer(opts *options.AuthorizerOptions) *OPAAuthorizer {
-	return &OPAAuthorizer{opaURI: opts.AuthorizerUri}
+	return &OPAAuthorizer{opaURI: opts.AuthorizerUri, cacher: authzcache.NewOPACache()}
 }
 
 func convertToV1Authz(userExtras map[string][]string) map[string]v1.ExtraValue {
@@ -104,6 +104,7 @@ func authzRequestFunc(uri string) func(*v1.SubjectAccessReview, *authzcache.OPAC
 	return func(sar *v1.SubjectAccessReview, cache *authzcache.OPACache) (*v1.SubjectAccessReview, error) {
 		var resp opaResponse
 		jsonPayload := createOpaRequestPayload(sar)
+		// check cache
 		if cache != nil {
 			bytes, ok := cache.Get(string(jsonPayload))
 			if ok {

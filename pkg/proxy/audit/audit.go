@@ -5,29 +5,23 @@ import (
 	"fmt"
 	"net/http"
 
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/sets"
 	genericapifilters "k8s.io/apiserver/pkg/endpoints/filters"
-	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
 
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
-	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer"
-	"github.com/jetstack/kube-oidc-proxy/pkg/noimpersonatedrequest"
 )
 
 type Audit struct {
 	opts         *options.AuditOptions
 	serverConfig *server.CompletedConfig
-	authzOpts    *options.AuthorizerOptions
 }
 
 // New creates a new Audit struct to handle auditing for proxy requests. This
 // is mostly a wrapper for the apiserver auditing handlers to combine them with
 // the proxy.
-func New(opts *options.AuditOptions, authzOpts *options.AuthorizerOptions, externalAddress string, secureServingInfo *server.SecureServingInfo) (*Audit, error) {
+func New(opts *options.AuditOptions, externalAddress string, secureServingInfo *server.SecureServingInfo) (*Audit, error) {
 	serverConfig := &server.Config{
 		ExternalAddress: externalAddress,
 		SecureServing:   secureServingInfo,
@@ -48,7 +42,6 @@ func New(opts *options.AuditOptions, authzOpts *options.AuthorizerOptions, exter
 
 	return &Audit{
 		opts:         opts,
-		authzOpts:    authzOpts,
 		serverConfig: &completed,
 	}, nil
 }
@@ -76,22 +69,8 @@ func (a *Audit) Shutdown() error {
 // WithRequest will wrap the given handler to inject the request information
 // into the context which is then used by the wrapped audit handler.
 func (a *Audit) WithRequest(handler http.Handler) http.Handler {
-	scheme := runtime.NewScheme()
-	// Если авторизатор включен, то встраиваем его в обработку запроса
-	if len(a.authzOpts.AuthorizerUri) > 0 {
-		// Запрос на API-сервер пойдет от имени SA пода, действующего с правами админа
-		handler = noimpersonatedrequest.WithPodSA(handler, noimpersonatedrequest.ReadInClusterToken)
-		handler = genericapifilters.WithAuthorization(handler, authorizer.NewOPAAuthorizer(a.authzOpts), serializer.NewCodecFactory(scheme).WithoutConversion())
-	}
-	// Запрос сначала пройдет аудит, потом на авторизацию, иначе пропадет и нифига не узнаем
 	handler = genericapifilters.WithAudit(handler, a.serverConfig.AuditBackend, a.serverConfig.AuditPolicyChecker, a.serverConfig.LongRunningFunc)
-
-	// Без проинициализированной фабрики на авторизацию не приходят resourceAttributes, только nonResourceAttributes
-	rif := request.RequestInfoFactory{
-		APIPrefixes:          sets.NewString("api", "apis"),
-		GrouplessAPIPrefixes: sets.NewString("api"),
-	}
-	return genericapifilters.WithRequestInfo(handler, &rif)
+	return genericapifilters.WithRequestInfo(handler, a.serverConfig.RequestInfoResolver)
 }
 
 // WithUnauthorized will wrap the given handler to inject the request

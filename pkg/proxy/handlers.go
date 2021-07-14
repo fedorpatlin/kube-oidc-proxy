@@ -16,9 +16,8 @@ import (
 
 func (p *Proxy) withHandlers(handler http.Handler) http.Handler {
 	// Set up proxy handlers
-
+	handler = p.authorizer.WithRequest(handler)
 	handler = p.auditor.WithRequest(handler)
-	// handler = p.withAuthorizeRequest(handler)
 	handler = p.withImpersonateRequest(handler)
 	handler = p.withAuthenticateRequest(handler)
 
