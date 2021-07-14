@@ -20,7 +20,7 @@ type listEntry struct {
 }
 
 type OPACache struct {
-	mux       *sync.RWMutex
+	mux       *sync.Mutex
 	cache     map[string]*list.Element
 	evictList *list.List
 	hashImpl  hash.Hash
@@ -29,7 +29,7 @@ type OPACache struct {
 
 func NewOPACache() *OPACache {
 	c := OPACache{
-		mux:       &sync.RWMutex{},
+		mux:       &sync.Mutex{},
 		hashImpl:  crypto.SHA256.New(),
 		cache:     map[string]*list.Element{},
 		evictList: list.New(),
@@ -69,8 +69,8 @@ func (c *OPACache) Get(key string) (*[]byte, bool) {
 	if err != nil {
 		return nil, false
 	}
-	c.mux.RLock()
-	defer c.mux.RUnlock()
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	found, ok := c.cache[key]
 	if !ok {
 		return nil, ok

@@ -101,7 +101,10 @@ func New(restConfig *rest.Config,
 	if err != nil {
 		return nil, err
 	}
-	authorizer := authorizer.NewOPAAuthorizer(authzOptions)
+	var authz *authorizer.OPAAuthorizer
+	if len(authzOptions.AuthorizerUri) > 0 {
+		authz = authorizer.NewOPAAuthorizer(authzOptions)
+	}
 	return &Proxy{
 		restConfig:        restConfig,
 		hooks:             hooks.New(),
@@ -111,7 +114,7 @@ func New(restConfig *rest.Config,
 		oidcRequestAuther: bearertoken.New(tokenAuther),
 		tokenAuther:       tokenAuther,
 		auditor:           auditor,
-		authorizer:        authorizer,
+		authorizer:        authz,
 	}, nil
 }
 
