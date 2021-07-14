@@ -4,7 +4,6 @@ package audit
 import (
 	"fmt"
 	"net/http"
-	"os"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -13,7 +12,6 @@ import (
 	"k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/server"
 	genericfilters "k8s.io/apiserver/pkg/server/filters"
-	"k8s.io/klog"
 
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
 	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer"
@@ -79,18 +77,16 @@ func (a *Audit) Shutdown() error {
 // into the context which is then used by the wrapped audit handler.
 func (a *Audit) WithRequest(handler http.Handler) http.Handler {
 	scheme := runtime.NewScheme()
-	handler = genericapifilters.WithAudit(handler, a.serverConfig.AuditBackend, a.serverConfig.AuditPolicyChecker, a.serverConfig.LongRunningFunc)
+	// Если авторизатор включен, то встраиваем его в обработку запроса
 	if len(a.authzOpts.AuthorizerUri) > 0 {
-		handler = noimpersonatedrequest.WithPodSA(handler, func() []byte {
-			saToken, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-			if err != nil {
-				klog.Errorf("error reading serviceaccount token %s", err.Error())
-				return []byte("")
-			}
-			return saToken
-		})
+		// Запрос на API-сервер пойдет от имени SA пода, действующего с правами админа
+		handler = noimpersonatedrequest.WithPodSA(handler, noimpersonatedrequest.ReadInClusterToken)
 		handler = genericapifilters.WithAuthorization(handler, authorizer.NewOPAAuthorizer(a.authzOpts), serializer.NewCodecFactory(scheme).WithoutConversion())
 	}
+	// Запрос сначала пройдет аудит, потом на авторизацию, иначе пропадет и нифига не узнаем
+	handler = genericapifilters.WithAudit(handler, a.serverConfig.AuditBackend, a.serverConfig.AuditPolicyChecker, a.serverConfig.LongRunningFunc)
+
+	// Без проинициализированной фабрики на авторизацию не приходят resourceAttributes, только nonResourceAttributes
 	rif := request.RequestInfoFactory{
 		APIPrefixes:          sets.NewString("api", "apis"),
 		GrouplessAPIPrefixes: sets.NewString("api"),

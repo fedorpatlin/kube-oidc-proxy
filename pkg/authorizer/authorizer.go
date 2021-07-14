@@ -12,11 +12,11 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authzcache"
 	"github.com/taskcluster/httpbackoff"
+	v1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sJson "k8s.io/apimachinery/pkg/runtime/serializer/json"
-
-	v1 "k8s.io/api/authorization/v1"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
 	"k8s.io/klog"
 )
@@ -24,6 +24,7 @@ import (
 // Open Policy Agent authorizer
 type OPAAuthorizer struct {
 	opaURI string
+	cacher *authzcache.OPACache
 }
 type opaResponse struct {
 	Result v1.SubjectAccessReview
@@ -32,8 +33,18 @@ type opaResponse struct {
 func NewOPAAuthorizer(opts *options.AuthorizerOptions) *OPAAuthorizer {
 	return &OPAAuthorizer{opaURI: opts.AuthorizerUri}
 }
-func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
-	sar := v1.SubjectAccessReview{
+
+func convertToV1Authz(userExtras map[string][]string) map[string]v1.ExtraValue {
+	extraValues := map[string]v1.ExtraValue{}
+	for k, v := range userExtras {
+		extraValues[k] = v
+	}
+	return extraValues
+}
+
+func NewSubjectAccessReviewFromAttributes(attrs authorizer.Attributes) *v1.SubjectAccessReview {
+	userExtraValues := convertToV1Authz(attrs.GetUser().GetExtra())
+	sar := &v1.SubjectAccessReview{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "SubjectAccessReview",
 			APIVersion: "authorization.k8s.io/v1",
@@ -54,46 +65,76 @@ func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attribut
 			},
 			User:   attrs.GetUser().GetName(),
 			Groups: attrs.GetUser().GetGroups(),
-			// Extra:  attrs.GetUser().GetExtra(),
+			Extra:  userExtraValues,
 		},
 	}
-	jsonPayload := createOpaRequestPayload(&sar)
+	return sar
+}
+
+func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
+	return a.authorize(ctx, attrs, authzRequestFunc(a.opaURI))
+}
+
+func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attributes, authzFn func(*v1.SubjectAccessReview, *authzcache.OPACache) (*v1.SubjectAccessReview, error)) (authorizer.Decision, string, error) {
+	sar := NewSubjectAccessReviewFromAttributes(attrs)
 	// request authorizer
-	// whauthz := webhook.WebhookAuthorizer{}
-	backoffClient := httpbackoff.Client{BackOffSettings: backoff.NewExponentialBackOff()}
-	backoffClient.BackOffSettings.MaxElapsedTime = time.Second * 5
-	authzResponse, _, err := backoffClient.Post(a.opaURI, "application/json", jsonPayload)
+	responseSAR, err := authzFn(sar, a.cacher)
 	if err != nil {
-		klog.Errorf("Authorization server is not responding: %s", err.Error())
-		return authorizer.DecisionNoOpinion, "Authorizer not responding", err
+		return authorizer.DecisionNoOpinion, "I have no idea about it", err
 	}
-	defer authzResponse.Body.Close()
-	if authzResponse.StatusCode == 200 {
+	if responseSAR.Status.Denied {
+		return authorizer.DecisionDeny, responseSAR.Status.Reason, nil
+	}
+
+	if !responseSAR.Status.Allowed {
+		return authorizer.DecisionNoOpinion, responseSAR.Status.Reason, nil
+	}
+	if a.cacher != nil {
+		cachePositive, err := json.Marshal(responseSAR)
+		if err == nil {
+			a.cacher.Put(string(createOpaRequestPayload(sar)), &cachePositive)
+		} else {
+			klog.Errorf("error marshaling SAR: %s", err.Error())
+		}
+	}
+	return authorizer.DecisionAllow, "", nil
+}
+
+func authzRequestFunc(uri string) func(*v1.SubjectAccessReview, *authzcache.OPACache) (*v1.SubjectAccessReview, error) {
+	return func(sar *v1.SubjectAccessReview, cache *authzcache.OPACache) (*v1.SubjectAccessReview, error) {
+		var resp opaResponse
+		jsonPayload := createOpaRequestPayload(sar)
+		if cache != nil {
+			bytes, ok := cache.Get(string(jsonPayload))
+			if ok {
+				cachedResponse := &v1.SubjectAccessReview{}
+				err := json.Unmarshal(*bytes, cachedResponse)
+				if err == nil {
+					return cachedResponse, nil
+				}
+			}
+		}
+		backoffClient := httpbackoff.Client{BackOffSettings: backoff.NewExponentialBackOff()}
+		backoffClient.BackOffSettings.MaxElapsedTime = time.Second * 5
+		authzResponse, _, err := backoffClient.Post(uri, "application/json", jsonPayload)
+		if err != nil {
+			klog.Errorf("Authorization server is not responding: %s", err.Error())
+			return nil, err
+		}
+		defer authzResponse.Body.Close()
+		// if authzResponse.StatusCode != 200 {
+		// 	return nil, fmt.Errorf("response code not HTTP.OK: %d", authzResponse.StatusCode)
+		// }
 		bodyBytes := make([]byte, 2048)
 		bytesRead, err := authzResponse.Body.Read(bodyBytes)
 		if err != nil && err != io.EOF {
 			klog.Errorf("Error reading Authz response body: %s", err.Error())
-			return authorizer.DecisionNoOpinion, "Authorizer not responding", fmt.Errorf("authorizer is not responding: %s", err.Error())
+			return nil, err
 		}
 		bodyBytes = bodyBytes[:bytesRead]
-		var resp opaResponse
 		err = json.Unmarshal(bodyBytes, &resp)
-		if err != nil {
-			klog.Errorf("Error reading authzResponse: %s", err.Error())
-			klog.Error(string(bodyBytes))
-			return authorizer.DecisionNoOpinion, "Authorizer response invalid", fmt.Errorf("error: %s", err.Error())
-		}
-		if resp.Result.Status.Denied {
-			return authorizer.DecisionDeny, resp.Result.Status.Reason, nil
-		}
-
-		if !resp.Result.Status.Allowed {
-			return authorizer.DecisionNoOpinion, resp.Result.Status.Reason, nil
-		}
-		return authorizer.DecisionAllow, "", nil
+		return &resp.Result, err
 	}
-
-	return authorizer.DecisionNoOpinion, "I have no idea about it", nil
 }
 
 func createOpaRequestPayload(sar *v1.SubjectAccessReview) []byte {

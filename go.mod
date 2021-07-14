@@ -3,7 +3,7 @@ module github.com/jetstack/kube-oidc-proxy
 go 1.13
 
 require (
-	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/golang/mock v1.2.0
 	github.com/heptiolabs/healthcheck v0.0.0-20180807145615-6ff867650f40
 	github.com/onsi/ginkgo v1.11.0
