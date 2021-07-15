@@ -25,6 +25,7 @@ build image:
   stage: image
   tags: ["dind"]
   script:
+    - cp bin/kube-oidc-proxy bin/kube-oidc-proxy-linux
     - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
     - docker login $CI_REGISTRY
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
