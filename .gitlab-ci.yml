@@ -6,13 +6,13 @@ stages:
 test code:
   stage: test
   tags: ["docker"]
-  image: golang-buster:latest
+  image: golang:1.16.6-buster
   script: make test
 
 build binary:
   stage: build
   tags: ["docker"]
-  image: golang-buster:latest
+  image: golang:1.16.6-buster
   script: make build
   artifacts:
     untracked: false
