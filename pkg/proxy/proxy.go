@@ -19,6 +19,7 @@ import (
 	"k8s.io/klog"
 
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer"
 	"github.com/jetstack/kube-oidc-proxy/pkg/proxy/audit"
 	"github.com/jetstack/kube-oidc-proxy/pkg/proxy/context"
 	"github.com/jetstack/kube-oidc-proxy/pkg/proxy/hooks"
@@ -60,6 +61,7 @@ type Proxy struct {
 	tokenReviewer     *tokenreview.TokenReview
 	secureServingInfo *server.SecureServingInfo
 	auditor           *audit.Audit
+	authorizer        *authorizer.OPAAuthorizer
 
 	restConfig            *rest.Config
 	clientTransport       http.RoundTripper
@@ -74,6 +76,7 @@ type Proxy struct {
 func New(restConfig *rest.Config,
 	oidcOptions *options.OIDCAuthenticationOptions,
 	auditOptions *options.AuditOptions,
+	authzOptions *options.AuthorizerOptions,
 	tokenReviewer *tokenreview.TokenReview,
 	ssinfo *server.SecureServingInfo,
 	config *Config) (*Proxy, error) {
@@ -98,7 +101,10 @@ func New(restConfig *rest.Config,
 	if err != nil {
 		return nil, err
 	}
-
+	var authz *authorizer.OPAAuthorizer
+	if len(authzOptions.AuthorizerUri) > 0 {
+		authz = authorizer.NewOPAAuthorizer(authzOptions)
+	}
 	return &Proxy{
 		restConfig:        restConfig,
 		hooks:             hooks.New(),
@@ -108,6 +114,7 @@ func New(restConfig *rest.Config,
 		oidcRequestAuther: bearertoken.New(tokenAuther),
 		tokenAuther:       tokenAuther,
 		auditor:           auditor,
+		authorizer:        authz,
 	}, nil
 }
 

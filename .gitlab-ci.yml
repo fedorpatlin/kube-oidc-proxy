@@ -1,0 +1,32 @@
+stages:
+  - "test"
+  - "build"
+  - "image"
+
+test code:
+  stage: test
+  tags: ["docker"]
+  image: golang:1.16.6-buster
+  script: make test
+
+build binary:
+  stage: build
+  tags: ["docker"]
+  image: golang:1.16.6-buster
+  script: make build
+  artifacts:
+    untracked: false
+    expire_in: 1 days
+    paths:
+      - "bin/kube-oidc-proxy"
+      - "bin/kube-oidc-proxy-linux"
+
+build image:
+  stage: image
+  tags: ["dind"]
+  script:
+    - cp bin/kube-oidc-proxy bin/kube-oidc-proxy-linux
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker rmi $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG

@@ -22,8 +22,8 @@ type Options struct {
 	Audit              *AuditOptions
 	Client             *ClientOptions
 	Misc               *MiscOptions
-
-	nfs *cliflag.NamedFlagSets
+	Authorizer         *AuthorizerOptions
+	nfs                *cliflag.NamedFlagSets
 }
 
 func New() *Options {
@@ -37,8 +37,8 @@ func New() *Options {
 		Audit:              NewAuditOptions(nfs),
 		Client:             NewClientOptions(nfs),
 		Misc:               NewMiscOptions(nfs),
-
-		nfs: nfs,
+		Authorizer:         NewAuthorizerOptions(nfs),
+		nfs:                nfs,
 	}
 }
 
