@@ -16,6 +16,9 @@ import (
 
 func (p *Proxy) withHandlers(handler http.Handler) http.Handler {
 	// Set up proxy handlers
+	if p.authorizer != nil {
+		handler = p.authorizer.WithRequest(handler)
+	}
 	handler = p.auditor.WithRequest(handler)
 	handler = p.withImpersonateRequest(handler)
 	handler = p.withAuthenticateRequest(handler)
@@ -184,8 +187,11 @@ func (p *Proxy) newErrorHandler() func(rw http.ResponseWriter, r *http.Request, 
 			// If Unauthorized then error and report to audit
 			unauthedHandler.ServeHTTP(rw, r)
 			return
-
-			// User request with impersonation
+		// Access denied to object
+		// case errAccessDenied:
+		// 	http.Error(rw, "Access denied", http.StatusForbidden)
+		// 	return
+		// User request with impersonation
 		case errImpersonateHeader:
 			klog.V(2).Infof("impersonation user request %s", r.RemoteAddr)
 			http.Error(rw, "Impersonation requests are disabled when using kube-oidc-proxy", http.StatusForbidden)

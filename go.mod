@@ -3,6 +3,7 @@ module github.com/jetstack/kube-oidc-proxy
 go 1.13
 
 require (
+	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/golang/mock v1.2.0
 	github.com/heptiolabs/healthcheck v0.0.0-20180807145615-6ff867650f40
 	github.com/onsi/ginkgo v1.11.0
@@ -11,6 +12,7 @@ require (
 	github.com/sirupsen/logrus v1.4.2
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
+	github.com/taskcluster/httpbackoff v1.0.0
 	gopkg.in/DATA-DOG/go-sqlmock.v1 v1.3.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.3.1
 	k8s.io/api v0.18.0
