@@ -5,6 +5,7 @@ package authzcache
 import (
 	"container/list"
 	"crypto"
+
 	_ "crypto/sha256"
 	"encoding/base64"
 	"fmt"
@@ -16,7 +17,7 @@ const maxCachedObjects int = 1024
 
 type listEntry struct {
 	key   string
-	value *[]byte
+	value []byte
 }
 
 type OPACache struct {
@@ -28,13 +29,13 @@ type OPACache struct {
 }
 
 func NewOPACache() *OPACache {
-	c := OPACache{
-		mux:       &sync.Mutex{},
-		hashImpl:  crypto.SHA256.New(),
-		cache:     map[string]*list.Element{},
-		evictList: list.New(),
-		count:     0,
-	}
+	c := OPACache{}
+	c.mux = &sync.Mutex{}
+	c.hashImpl = crypto.SHA256.New()
+	c.cache = map[string]*list.Element{}
+	c.evictList = list.New()
+	c.count = 0
+
 	return &c
 }
 
@@ -47,24 +48,30 @@ func (c *OPACache) getStringHash(toHash string) (string, error) {
 	return base64.URLEncoding.EncodeToString(c.hashImpl.Sum(nil)), nil
 }
 
-func (c *OPACache) Put(key string, val *[]byte) error {
-	key, err := c.getStringHash(key)
+func (c *OPACache) Put(keystr string, val []byte) error {
+	if _, ok := c.Get(keystr); ok {
+		return nil
+	}
+	key, err := c.getStringHash(keystr)
 	if err != nil {
 		return err
 	}
 	c.mux.Lock()
 	defer c.mux.Unlock()
-	if c.count > maxCachedObjects {
+	c.put(key, val)
+	return nil
+}
+func (c *OPACache) put(key string, val []byte) {
+	if c.count >= maxCachedObjects {
 		c.evictLeastUsed()
 	}
 	newEntry := listEntry{key: key, value: val}
 	newElement := c.evictList.PushFront(newEntry)
 	c.count += 1
 	c.cache[key] = newElement
-	return nil
 }
 
-func (c *OPACache) Get(key string) (*[]byte, bool) {
+func (c *OPACache) Get(key string) ([]byte, bool) {
 	key, err := c.getStringHash(key)
 	if err != nil {
 		return nil, false
@@ -81,12 +88,16 @@ func (c *OPACache) Get(key string) (*[]byte, bool) {
 }
 
 func (c *OPACache) Prune() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
 	for k := range c.cache {
 		delete(c.cache, k)
 	}
 	c.evictList.Init()
+	c.count = 0
 }
 
+// вызывается только из синхронизированного кода, поэтому лочить явно тут ничего не надо
 func (c *OPACache) evictLeastUsed() {
 	evictElement := c.evictList.Back()
 	if evictElement == nil {

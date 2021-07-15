@@ -92,7 +92,7 @@ func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attribut
 	if a.cacher != nil {
 		cachePositive, err := json.Marshal(responseSAR)
 		if err == nil {
-			a.cacher.Put(string(createOpaRequestPayload(sar)), &cachePositive)
+			a.cacher.Put(string(createOpaRequestPayload(sar)), cachePositive)
 		} else {
 			klog.Errorf("error marshaling SAR: %s", err.Error())
 		}
@@ -109,7 +109,7 @@ func authzRequestFunc(uri string) func(*v1.SubjectAccessReview, *authzcache.OPAC
 			bytes, ok := cache.Get(string(jsonPayload))
 			if ok {
 				cachedResponse := &v1.SubjectAccessReview{}
-				err := json.Unmarshal(*bytes, cachedResponse)
+				err := json.Unmarshal(bytes, cachedResponse)
 				if err == nil {
 					return cachedResponse, nil
 				}
