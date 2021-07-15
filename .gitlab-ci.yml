@@ -18,14 +18,14 @@ build binary:
     untracked: false
     expire_in: 1 days
     paths:
+      - "bin/kube-oidc-proxy"
       - "bin/kube-oidc-proxy-linux"
 
 build image:
   stage: image
   tags: ["dind"]
   script:
-    - make image
-    - docker tag kube-oidc-proxy:latest $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG .
     - docker login $CI_REGISTRY
     - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
     - docker rmi $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG kube-oidc-proxy:latest
