@@ -79,7 +79,7 @@ func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attribut
 	sar := NewSubjectAccessReviewFromAttributes(attrs)
 	// request authorizer
 	responseSAR, err := authzFn(sar, a.cacher)
-	if err != nil {
+	if responseSAR == nil || err != nil {
 		return authorizer.DecisionNoOpinion, "I have no idea about it", err
 	}
 	if responseSAR.Status.Denied {

@@ -49,16 +49,16 @@ func (c *OPACache) getStringHash(toHash string) (string, error) {
 }
 
 func (c *OPACache) Put(keystr string, val []byte) error {
-	if _, ok := c.Get(keystr); ok {
-		return nil
-	}
-	key, err := c.getStringHash(keystr)
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	hashedKey, err := c.getStringHash(keystr)
 	if err != nil {
 		return err
 	}
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	c.put(key, val)
+	if _, ok := c.get(hashedKey); ok {
+		return nil
+	}
+	c.put(hashedKey, val)
 	return nil
 }
 func (c *OPACache) put(key string, val []byte) {
@@ -72,12 +72,16 @@ func (c *OPACache) put(key string, val []byte) {
 }
 
 func (c *OPACache) Get(key string) ([]byte, bool) {
-	key, err := c.getStringHash(key)
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	hashedKey, err := c.getStringHash(key)
 	if err != nil {
 		return nil, false
 	}
-	c.mux.Lock()
-	defer c.mux.Unlock()
+	return c.get(hashedKey)
+}
+
+func (c *OPACache) get(key string) ([]byte, bool) {
 	found, ok := c.cache[key]
 	if !ok {
 		return nil, ok
