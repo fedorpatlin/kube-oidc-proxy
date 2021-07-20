@@ -18,20 +18,22 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sJson "k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 )
 
 // Open Policy Agent authorizer
 type OPAAuthorizer struct {
-	opaURI string
-	cacher *authzcache.OPACache
+	opaURI     string
+	cacher     *authzcache.OPACache
+	restConfig *rest.Config
 }
 type opaResponse struct {
 	Result v1.SubjectAccessReview
 }
 
-func NewOPAAuthorizer(opts *options.AuthorizerOptions) *OPAAuthorizer {
-	return &OPAAuthorizer{opaURI: opts.AuthorizerUri, cacher: authzcache.NewOPACache()}
+func NewOPAAuthorizer(restConfig *rest.Config, opts *options.AuthorizerOptions) *OPAAuthorizer {
+	return &OPAAuthorizer{restConfig: restConfig, opaURI: opts.AuthorizerUri, cacher: authzcache.NewOPACache()}
 }
 
 func convertToV1Authz(userExtras map[string][]string) map[string]v1.ExtraValue {
@@ -92,7 +94,12 @@ func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attribut
 	if a.cacher != nil {
 		cachePositive, err := json.Marshal(responseSAR)
 		if err == nil {
-			a.cacher.Put(string(createOpaRequestPayload(sar)), cachePositive)
+			cacheKey, err := createOpaRequestPayload(sar)
+			if err == nil {
+				if err = a.cacher.Put(string(cacheKey), cachePositive); err != nil {
+					klog.Error(err.Error())
+				}
+			}
 		} else {
 			klog.Errorf("error marshaling SAR: %s", err.Error())
 		}
@@ -103,7 +110,10 @@ func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attribut
 func authzRequestFunc(uri string) func(*v1.SubjectAccessReview, *authzcache.OPACache) (*v1.SubjectAccessReview, error) {
 	return func(sar *v1.SubjectAccessReview, cache *authzcache.OPACache) (*v1.SubjectAccessReview, error) {
 		var resp opaResponse
-		jsonPayload := createOpaRequestPayload(sar)
+		jsonPayload, err := createOpaRequestPayload(sar)
+		if err != nil {
+			return nil, err
+		}
 		// check cache
 		if cache != nil {
 			bytes, ok := cache.Get(string(jsonPayload))
@@ -138,7 +148,7 @@ func authzRequestFunc(uri string) func(*v1.SubjectAccessReview, *authzcache.OPAC
 	}
 }
 
-func createOpaRequestPayload(sar *v1.SubjectAccessReview) []byte {
+func createOpaRequestPayload(sar *v1.SubjectAccessReview) ([]byte, error) {
 	sarSerializer := k8sJson.NewSerializerWithOptions(k8sJson.DefaultMetaFactory, nil, nil, k8sJson.SerializerOptions{
 		Yaml:   false,
 		Pretty: false,
@@ -146,7 +156,10 @@ func createOpaRequestPayload(sar *v1.SubjectAccessReview) []byte {
 	})
 	var buf []byte
 	serialisedSAR := bytes.NewBuffer(buf)
-	sarSerializer.Encode(sar, serialisedSAR)
+	err := sarSerializer.Encode(sar, serialisedSAR)
+	if err != nil {
+		return []byte{}, err
+	}
 	jsonPayload := fmt.Sprintf("{\"input\": %s}", serialisedSAR.Bytes())
-	return []byte(jsonPayload)
+	return []byte(jsonPayload), nil
 }

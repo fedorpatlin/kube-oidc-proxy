@@ -17,7 +17,7 @@ func (a *OPAAuthorizer) WithRequest(handler http.Handler) http.Handler {
 	scheme := runtime.NewScheme()
 	// Если авторизатор включен, то встраиваем его в обработку запроса
 	// Запрос на API-сервер пойдет от имени SA пода, действующего с правами админа
-	handler = noimpersonatedrequest.WithPodSA(handler, noimpersonatedrequest.ReadInClusterToken)
+	handler = noimpersonatedrequest.WithPodSA(handler, noimpersonatedrequest.RestConfigToken(a.restConfig))
 	handler = genericapifilters.WithAuthorization(handler, a, serializer.NewCodecFactory(scheme).WithoutConversion())
 
 	// Без проинициализированной фабрики на авторизацию не приходят resourceAttributes, только nonResourceAttributes

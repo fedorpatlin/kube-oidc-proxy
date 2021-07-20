@@ -9,6 +9,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer"
 	"github.com/jetstack/kube-oidc-proxy/pkg/probe"
 	"github.com/jetstack/kube-oidc-proxy/pkg/proxy"
 	"github.com/jetstack/kube-oidc-proxy/pkg/proxy/tokenreview"
@@ -81,11 +82,17 @@ func buildRunCommand(stopCh <-chan struct{}, opts *options.Options) *cobra.Comma
 
 				ExtraUserHeaders:                opts.App.ExtraHeaderOptions.ExtraUserHeaders,
 				ExtraUserHeadersClientIPEnabled: opts.App.ExtraHeaderOptions.EnableClientIPExtraUserHeader,
+				Authorizer:                      len(opts.Authorizer.AuthorizerUri) > 0,
+			}
+			// Initialize authorizer if enabled
+			var authz *authorizer.OPAAuthorizer
+			if proxyConfig.Authorizer {
+				authz = authorizer.NewOPAAuthorizer(restConfig, opts.Authorizer)
 			}
 
 			// Initialise proxy with OIDC token authenticator
-			p, err := proxy.New(restConfig, opts.OIDCAuthentication, opts.Audit, opts.Authorizer,
-				tokenReviewer, secureServingInfo, proxyConfig)
+			p, err := proxy.New(restConfig, opts.OIDCAuthentication, opts.Audit,
+				tokenReviewer, secureServingInfo, authz, proxyConfig)
 			if err != nil {
 				return err
 			}

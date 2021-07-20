@@ -51,6 +51,7 @@ type Config struct {
 
 	ExtraUserHeaders                map[string][]string
 	ExtraUserHeadersClientIPEnabled bool
+	Authorizer                      bool
 }
 
 type errorHandlerFn func(http.ResponseWriter, *http.Request, error)
@@ -76,9 +77,8 @@ type Proxy struct {
 func New(restConfig *rest.Config,
 	oidcOptions *options.OIDCAuthenticationOptions,
 	auditOptions *options.AuditOptions,
-	authzOptions *options.AuthorizerOptions,
 	tokenReviewer *tokenreview.TokenReview,
-	ssinfo *server.SecureServingInfo,
+	ssinfo *server.SecureServingInfo, authz *authorizer.OPAAuthorizer,
 	config *Config) (*Proxy, error) {
 
 	// generate tokenAuther from oidc config
@@ -100,10 +100,6 @@ func New(restConfig *rest.Config,
 	auditor, err := audit.New(auditOptions, config.ExternalAddress, ssinfo)
 	if err != nil {
 		return nil, err
-	}
-	var authz *authorizer.OPAAuthorizer
-	if len(authzOptions.AuthorizerUri) > 0 {
-		authz = authorizer.NewOPAAuthorizer(authzOptions)
 	}
 	return &Proxy{
 		restConfig:        restConfig,
