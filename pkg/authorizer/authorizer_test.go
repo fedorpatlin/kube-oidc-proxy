@@ -91,7 +91,7 @@ func authzError(sar *v1.SubjectAccessReview, cache *authzcache.OPACache) (*v1.Su
 }
 
 func TestDecision(t *testing.T) {
-	authzer := NewOPAAuthorizer(&options.AuthorizerOptions{AuthorizerUri: "localhost:8080"})
+	authzer := NewOPAAuthorizer(nil, &options.AuthorizerOptions{AuthorizerUri: "localhost:8080"})
 	decision, reason, err := authzer.authorize(context.Background(), testAccess, alwaysDeny)
 	if err != nil {
 		t.Error(err.Error())
@@ -160,7 +160,7 @@ func TestHttpAuthorizer(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond * 100)
 	}
-	a := NewOPAAuthorizer(&options.AuthorizerOptions{AuthorizerUri: testURI})
+	a := NewOPAAuthorizer(nil, &options.AuthorizerOptions{AuthorizerUri: testURI})
 	a.cacher = authzcache.NewOPACache()
 	a.opaURI = strings.Join([]string{testURI, "/404/"}, "")
 	decision, _, err := a.Authorize(testContext, testAccess)
