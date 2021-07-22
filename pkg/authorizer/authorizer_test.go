@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -14,7 +15,7 @@ import (
 	"time"
 
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
-	"github.com/jetstack/kube-oidc-proxy/pkg/authzcache"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer/authzcache"
 	v1 "k8s.io/api/authorization/v1"
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/authorization/authorizer"
@@ -186,4 +187,16 @@ func TestHttpAuthorizer(t *testing.T) {
 	}
 
 	cancelFn()
+}
+
+type testRW struct{}
+
+func (rw testRW) Write(buf []byte) (int, error) {
+	log.Printf("OH NO %s", string(buf))
+	return 0, nil
+}
+func (rw testRW) Header() http.Header {
+	return http.Header{}
+}
+func (rw testRW) WriteHeader(code int) {
 }

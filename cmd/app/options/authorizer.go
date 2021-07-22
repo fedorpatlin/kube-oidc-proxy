@@ -8,15 +8,23 @@ import (
 )
 
 type AuthorizerOptions struct {
-	AuthorizerUri string
+	AuthorizerUri          string
+	ExtrasPath             string
+	ExtrasAnnotationPrefix string
 }
 
 func NewAuthorizerOptions(cfs *cliflag.NamedFlagSets) *AuthorizerOptions {
-	ao := AuthorizerOptions{AuthorizerUri: ""}
+	ao := AuthorizerOptions{
+		AuthorizerUri:          "",
+		ExtrasPath:             "",
+		ExtrasAnnotationPrefix: "",
+	}
 	ao.AddFlags(cfs.FlagSet("Authorizer options"))
 	return &ao
 }
 
 func (o *AuthorizerOptions) AddFlags(fs *pflag.FlagSet) {
-	fs.StringVar(&o.AuthorizerUri, "authorizer-uri", "", "Authorizer Open policy agent URI")
+	fs.StringVar(&o.AuthorizerUri, "authorizer-url", "", "Authorizer Open policy agent URI")
+	fs.StringVar(&o.ExtrasPath, "extras-url", "", "extra-data added to user.extras")
+	fs.StringVar(&o.ExtrasAnnotationPrefix, "extras-prefix", "authorization.example.com/", "extra-data annotation prefix")
 }
