@@ -81,13 +81,13 @@ func NewSubjectAccessReviewFromAttributes(attrs authorizer.Attributes) *v1.Subje
 	return sar
 }
 
-func (a *OPAAuthorizer) addClusterInfo(userExtra *map[string]v1.ExtraValue) {
-	if a.userExtraData != nil {
-		for k, v := range *a.userExtraData {
-			(*userExtra)[k] = v
-		}
-	}
-}
+// func (a *OPAAuthorizer) addClusterInfo(userExtra *map[string]v1.ExtraValue) {
+// 	if a.userExtraData != nil {
+// 		for k, v := range *a.userExtraData {
+// 			(*userExtra)[k] = v
+// 		}
+// 	}
+// }
 
 func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	return a.authorize(ctx, attrs, authzRequestFunc(a.opaURI))
@@ -95,9 +95,8 @@ func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attribut
 
 func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attributes, authzFn func(*v1.SubjectAccessReview, *authzcache.OPACache) (*v1.SubjectAccessReview, error)) (authorizer.Decision, string, error) {
 	sar := NewSubjectAccessReviewFromAttributes(attrs)
-	a.addClusterInfo(&sar.Spec.Extra)
+	// a.addClusterInfo(&sar.Spec.Extra)
 	// request authorizer
-	// klog.Errorf("user: %v", sar.Spec.Extra)
 	responseSAR, err := authzFn(sar, a.cacher)
 	if responseSAR == nil || err != nil {
 		return authorizer.DecisionNoOpinion, "I have no idea about it", err

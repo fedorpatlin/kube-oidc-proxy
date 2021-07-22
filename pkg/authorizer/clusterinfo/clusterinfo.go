@@ -6,10 +6,14 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"k8s.io/apiserver/pkg/authentication/user"
+	"k8s.io/apiserver/pkg/endpoints/request"
 )
 
 const extraBytesBufferSize = 1024
@@ -21,6 +25,10 @@ const (
 )
 
 type ClusterInfo map[string][]string
+
+func (c ClusterInfo) GetInfo() map[string][]string {
+	return c
+}
 
 func FromUrl(userExtrasUrl string, prefix string) (ue *ClusterInfo, err error) {
 	prefix = sanitize(prefix)
@@ -87,4 +95,35 @@ func parseFromStrings(r io.Reader, prefix string) (ue *ClusterInfo) {
 
 func sanitize(userInput string) string {
 	return strings.Trim(userInput, "\"'")
+}
+
+func (c ClusterInfo) WithClusterInfo(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+		requestUser, ok := request.UserFrom(r.Context())
+		if ok {
+			oldExtra := requestUser.GetExtra()
+			if len(oldExtra) == 0 {
+				oldExtra = make(map[string][]string)
+			}
+			newUser := &customUserInfo{Info: requestUser, customExtra: oldExtra}
+			newUser.addExtra(c.GetInfo())
+			r = r.WithContext(request.WithUser(r.Context(), newUser))
+		}
+		next.ServeHTTP(rw, r)
+	})
+}
+
+type customUserInfo struct {
+	user.Info
+	customExtra map[string][]string
+}
+
+func (u *customUserInfo) GetExtra() map[string][]string {
+	return u.customExtra
+}
+
+func (u *customUserInfo) addExtra(clusterInfo map[string][]string) {
+	for k, v := range clusterInfo {
+		u.customExtra[k] = v
+	}
 }
