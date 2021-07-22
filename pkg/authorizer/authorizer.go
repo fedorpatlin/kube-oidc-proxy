@@ -12,7 +12,8 @@ import (
 
 	"github.com/cenkalti/backoff"
 	"github.com/jetstack/kube-oidc-proxy/cmd/app/options"
-	"github.com/jetstack/kube-oidc-proxy/pkg/authzcache"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer/authzcache"
+	"github.com/jetstack/kube-oidc-proxy/pkg/authorizer/clusterinfo"
 	"github.com/taskcluster/httpbackoff"
 	v1 "k8s.io/api/authorization/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,21 +25,27 @@ import (
 
 // Open Policy Agent authorizer
 type OPAAuthorizer struct {
-	opaURI     string
-	cacher     *authzcache.OPACache
-	restConfig *rest.Config
+	opaURI        string
+	cacher        *authzcache.OPACache
+	restConfig    *rest.Config
+	userExtraData *clusterinfo.ClusterInfo
 }
 type opaResponse struct {
 	Result v1.SubjectAccessReview
 }
 
 func NewOPAAuthorizer(restConfig *rest.Config, opts *options.AuthorizerOptions) *OPAAuthorizer {
-	return &OPAAuthorizer{restConfig: restConfig, opaURI: opts.AuthorizerUri, cacher: authzcache.NewOPACache()}
+	ue, err := clusterinfo.FromUrl(opts.ExtrasPath, opts.ExtrasAnnotationPrefix)
+	if err != nil {
+		klog.Error(err.Error())
+		ue = nil
+	}
+	return &OPAAuthorizer{restConfig: restConfig, opaURI: opts.AuthorizerUri, cacher: authzcache.NewOPACache(), userExtraData: ue}
 }
 
-func convertToV1Authz(userExtras map[string][]string) map[string]v1.ExtraValue {
+func convertToV1Authz(clusterinfo map[string][]string) map[string]v1.ExtraValue {
 	extraValues := map[string]v1.ExtraValue{}
-	for k, v := range userExtras {
+	for k, v := range clusterinfo {
 		extraValues[k] = v
 	}
 	return extraValues
@@ -46,6 +53,7 @@ func convertToV1Authz(userExtras map[string][]string) map[string]v1.ExtraValue {
 
 func NewSubjectAccessReviewFromAttributes(attrs authorizer.Attributes) *v1.SubjectAccessReview {
 	userExtraValues := convertToV1Authz(attrs.GetUser().GetExtra())
+	// klog.Errorf("%v", attrs.GetUser().GetExtra())
 	sar := &v1.SubjectAccessReview{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "SubjectAccessReview",
@@ -73,12 +81,21 @@ func NewSubjectAccessReviewFromAttributes(attrs authorizer.Attributes) *v1.Subje
 	return sar
 }
 
+// func (a *OPAAuthorizer) addClusterInfo(userExtra *map[string]v1.ExtraValue) {
+// 	if a.userExtraData != nil {
+// 		for k, v := range *a.userExtraData {
+// 			(*userExtra)[k] = v
+// 		}
+// 	}
+// }
+
 func (a *OPAAuthorizer) Authorize(ctx context.Context, attrs authorizer.Attributes) (authorizer.Decision, string, error) {
 	return a.authorize(ctx, attrs, authzRequestFunc(a.opaURI))
 }
 
 func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attributes, authzFn func(*v1.SubjectAccessReview, *authzcache.OPACache) (*v1.SubjectAccessReview, error)) (authorizer.Decision, string, error) {
 	sar := NewSubjectAccessReviewFromAttributes(attrs)
+	// a.addClusterInfo(&sar.Spec.Extra)
 	// request authorizer
 	responseSAR, err := authzFn(sar, a.cacher)
 	if responseSAR == nil || err != nil {
