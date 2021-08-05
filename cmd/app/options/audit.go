@@ -9,6 +9,7 @@ import (
 
 type AuditOptions struct {
 	*apiserveroptions.AuditOptions
+	*apiserveroptions.AuditDynamicOptions
 }
 
 func NewAuditOptions(nfs *cliflag.NamedFlagSets) *AuditOptions {

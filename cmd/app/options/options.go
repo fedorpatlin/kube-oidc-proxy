@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jetstack/kube-oidc-proxy/pkg/util/term"
 	"github.com/spf13/cobra"
 	k8sErrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/apiserver/pkg/util/term"
 	cliflag "k8s.io/component-base/cli/flag"
 )
 
@@ -90,9 +90,9 @@ func (o *Options) Validate(cmd *cobra.Command) error {
 		(o.App.ExtraHeaderOptions.EnableClientIPExtraUserHeader || len(o.App.ExtraHeaderOptions.ExtraUserHeaders) > 0) {
 		errs = append(errs, errors.New("cannot add extra user headers when impersonation disabled"))
 	}
-
-	if o.Audit.DynamicOptions.Enabled {
-		errs = append(errs, errors.New("The flag --audit-dynamic-configuration may not be set"))
+	//AuditDynamicOptions.Enabled
+	if o.Audit.AuditDynamicOptions.Enabled {
+		errs = append(errs, errors.New("the flag --audit-dynamic-configuration may not be set"))
 	}
 
 	if len(errs) > 0 {
