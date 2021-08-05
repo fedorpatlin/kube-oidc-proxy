@@ -40,5 +40,5 @@ require (
 	k8s.io/client-go v0.21.3
 	k8s.io/component-base v0.21.3
 	k8s.io/klog v1.0.0
-	sigs.k8s.io/kind v0.11.0
+	sigs.k8s.io/kind v0.11.1
 )
