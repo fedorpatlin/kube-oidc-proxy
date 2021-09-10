@@ -121,7 +121,7 @@ func (a *OPAAuthorizer) authorize(ctx context.Context, attrs authorizer.Attribut
 			klog.Errorf("error marshaling SAR: %s", err.Error())
 		}
 	}
-	return authorizer.DecisionAllow, "", nil
+	return authorizer.DecisionAllow, responseSAR.Status.Reason, nil
 }
 
 func authzRequestFunc(uri string) func(*v1.SubjectAccessReview, *authzcache.OPACache) (*v1.SubjectAccessReview, error) {
